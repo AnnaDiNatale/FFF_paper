@@ -1,0 +1,802 @@
+---
+title: "Reddit_climate"
+author: "Anna Di Natale"
+date: "2024-03-01"
+output: pdf_document
+---
+Loading necessary libraries
+```{r}
+library(utils)  ##version 4.3.1
+library(dplyr)  ##version 1.1.4
+library(tidyverse)  ##version 2.0.0
+library(ggplot2) ##version 3.4.4
+```
+
+
+Histogram data - activity
+Figure 1 top panel
+```{r}
+climatechange_all<-readRDS("subs_climate_allemo.Rda")
+comm_climatechange_all<-readRDS("comments_climate_allemo.Rda")
+
+###importing baseline counts
+baseline_comments<-read.csv('reddit_linecounts_comments.txt',sep=" ",header = F,col.names=c('counts','filename'))
+baseline_submissions<-read.csv('reddit_linecounts_submissions.txt',sep=" ",header = F,col.names=c('counts','filename'))
+
+##adding dates
+baseline_comments$month<-NA
+baseline_comments$year<-NA
+for(i in seq(1,nrow(baseline_comments)))
+{
+  file<-gsub("RC_","",baseline_comments$filename[i])
+  baseline_comments$month[i]<-strsplit(file,'-')[[1]][2]
+  baseline_comments$year[i]<-strsplit(file,'-')[[1]][1]
+}
+
+baseline_submissions$month<-NA
+baseline_submissions$year<-NA
+for(i in seq(1,nrow(baseline_submissions)))
+{
+  file<-gsub("RS_","",baseline_submissions$filename[i])
+  baseline_submissions$month[i]<-strsplit(file,'-')[[1]][2]
+  baseline_submissions$year[i]<-strsplit(file,'-')[[1]][1]
+}
+##removing useless columns
+baseline_comments$filename<-NULL
+baseline_submissions$filename<-NULL
+##joining comments and submissions
+baseline<-left_join(baseline_comments,baseline_submissions,by=c('month','year'))
+baseline$counts<-baseline$counts.x+baseline$counts.y
+
+##dividing data into climate skeptics and climate change and joining comments with submissions
+climateskeptics<-climatechange_all[climatechange_all$subreddit=='climateskeptics',c(1,3,5)]
+comm_climateskeptics<-comm_climatechange_all[comm_climatechange_all$subreddit=='climateskeptics',c(1,3,4)]
+climateskeptics<-rbind(climateskeptics,comm_climateskeptics)
+rownames(climateskeptics)<-seq(1,nrow(climateskeptics))
+climateskeptics$date<-format(as.POSIXct(climateskeptics$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+climatechange<-climatechange_all[climatechange_all$subreddit!='climateskeptics',c(1,3,5)]
+comm_climatechange<-comm_climatechange_all[comm_climatechange_all$subreddit!='climateskeptics',c(1,3,4)]
+climatechange<-rbind(climatechange,comm_climatechange)
+rownames(climatechange)<-seq(1,nrow(climatechange))
+climatechange$date<-format(as.POSIXct(climatechange$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+##histogram of activity counts per year
+hist_df<-data.frame(stringsAsFactors = F)
+ for(i in as.character(seq(2008,2022)))
+ {
+   print(i)
+   ##selecting data relative to the year and computing the number of entries
+   data_cc<-nrow(climatechange[format(as.Date(climatechange$date),"%Y")==i,])
+   data_cs<-nrow(climateskeptics[format(as.Date(climateskeptics$date),"%Y")==i,])
+   data_bl<-sum(baseline$counts[baseline$year==i])
+   
+   
+   hist_df<-rbind(hist_df,data.frame(year=i,counts=data_cc,subreddit_group="climatechange",stringsAsFactors = F))
+   hist_df<-rbind(hist_df,data.frame(year=i,counts=data_cs,subreddit_group="climateskeptics",stringsAsFactors = F))
+   hist_df<-rbind(hist_df,data.frame(year=i,counts=data_bl,subreddit_group="baseline",stringsAsFactors = F))
+ }
+
+##normalising the baseline
+hist_bl<-hist_df[hist_df$subreddit_group=='baseline',]
+c<-hist_bl$counts
+hist_bl$counts<-(c-min(c))/(max(c)-min(c))
+hist_bl$counts<-hist_bl$counts*max(hist_df$counts[hist_df$subreddit_group=='climatechange'])
+hist_bl$subreddit_group="baseline_norm"
+hist_df<-rbind(hist_df,hist_bl)
+
+
+##Variation in activity vs the year before
+hist_incr<-data.frame(stringsAsFactors = F)
+ for(i in as.character(seq(2009,2022)))
+ {
+   print(i)
+   for(subreddit in c('baseline','climatechange','climateskeptics'))
+   {
+     incr<-(hist_df$counts[hist_df$year==i&hist_df$subreddit_group==subreddit] - hist_df$counts[hist_df$year==as.character(as.numeric(i)-1)&hist_df$subreddit_group==subreddit]) / hist_df$counts[hist_df$year==i&hist_df$subreddit_group==subreddit]
+   hist_incr<-rbind(hist_incr,data.frame(year=i,incr=incr,subreddit_group=subreddit,stringsAsFactors = F))
+    }
+ }
+
+##plot of the increase, Figure 1 top panel
+ggplot(hist_incr[hist_incr$year>2009,], aes(x=year, y=incr, group=subreddit_group,col=subreddit_group)) +
+  geom_line()+theme_bw()+ 
+  geom_point()+scale_color_manual(values=c("black","#006cd1","#994f00"))+
+  ylab('Fraction variation of activity')
+
+```
+
+Monthly increase in activity volume (2018-2020)
+Figure 1 bottom panel
+```{r}
+###importing baseline counts
+baseline_comments<-read.csv('reddit_linecounts_comments.txt',sep=" ",header = F,col.names=c('counts','filename'))
+baseline_submissions<-read.csv('reddit_linecounts_submissions.txt',sep=" ",header = F,col.names=c('counts','filename'))
+
+###adding date
+baseline_comments$month<-NA
+baseline_comments$year<-NA
+for(i in seq(1,nrow(baseline_comments)))
+{
+  file<-gsub("RC_","",baseline_comments$filename[i])
+  baseline_comments$month[i]<-strsplit(file,'-')[[1]][2]
+  baseline_comments$year[i]<-strsplit(file,'-')[[1]][1]
+}
+
+baseline_submissions$month<-NA
+baseline_submissions$year<-NA
+for(i in seq(1,nrow(baseline_submissions)))
+{
+  file<-gsub("RS_","",baseline_submissions$filename[i])
+  baseline_submissions$month[i]<-strsplit(file,'-')[[1]][2]
+  baseline_submissions$year[i]<-strsplit(file,'-')[[1]][1]
+}
+##removing useless columns
+baseline_comments$filename<-NULL
+baseline_submissions$filename<-NULL
+##joining comments and submissions
+baseline<-left_join(baseline_comments,baseline_submissions,by=c('month','year'))
+baseline$counts<-baseline$counts.x+baseline$counts.y
+
+##dividing data into climate skeptics and climate change and joining comments with submissions
+climateskeptics<-climatechange_all[climatechange_all$subreddit=='climateskeptics',c(1,5)]
+comm_climateskeptics<-comm_climatechange_all[comm_climatechange_all$subreddit=='climateskeptics',c(1,4)]
+climateskeptics<-rbind(climateskeptics,comm_climateskeptics)
+rownames(climateskeptics)<-seq(1,nrow(climateskeptics))
+climateskeptics$date<-format(as.POSIXct(climateskeptics$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+climatechange<-climatechange_all[climatechange_all$subreddit!='climateskeptics',c(1,5)]
+comm_climatechange<-comm_climatechange_all[comm_climatechange_all$subreddit!='climateskeptics',c(1,4)]
+climatechange<-rbind(climatechange,comm_climatechange)
+rownames(climatechange)<-seq(1,nrow(climatechange))
+climatechange$date<-format(as.POSIXct(climatechange$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+##monthly activity data
+hist_df<-data.frame(stringsAsFactors = F)
+ for(i in as.character(seq(2018,2020)))
+ {
+   print(i)
+   for(j in c("01","02","03","04","05","06","07","08","09","10","11","12"))
+   {
+   ##selecting data relative to the year and computing the number of entries
+    data_cc<-length(which(format(as.Date(climatechange$date),"%Y")==i&format(as.Date(climatechange$date),"%m")==j))
+    data_cs<-length(which(format(as.Date(climateskeptics$date),"%Y")==i&format(as.Date(climateskeptics$date),"%m")==j,))
+    data_bl<-sum(baseline$counts[baseline$year==i&baseline$month==j])
+   
+   
+    hist_df<-rbind(hist_df,data.frame(year=i,month=j,counts=data_cc,subreddit_group="climatechange",stringsAsFactors = F))
+    hist_df<-rbind(hist_df,data.frame(year=i,month=j,counts=data_cs,subreddit_group="climateskeptics",stringsAsFactors = F))
+    hist_df<-rbind(hist_df,data.frame(year=i,month=j,counts=data_bl,subreddit_group="baseline",stringsAsFactors = F))
+   }
+ }
+hist_df$date <- as.Date(paste0("01-", paste(hist_df$month,hist_df$year,sep="-")), format = "%d-%m-%Y")
+
+##normalising the baseline
+hist_bl<-hist_df[hist_df$subreddit_group=='baseline',]
+c<-hist_bl$counts
+hist_bl$counts<-(c-min(c))/(max(c)-min(c))
+hist_bl$counts<-hist_bl$counts*max(hist_df$counts[hist_df$subreddit_group=='climatechange'])
+hist_bl$subreddit_group="baseline_norm"
+hist_df<-rbind(hist_df,hist_bl)
+
+##Plot figure 1 bottom panel
+ggplot(hist_df[hist_df$subreddit_group!='baseline',], aes(x=date, y=counts, group=subreddit_group,col=subreddit_group)) +
+  geom_line()+theme_bw()+ geom_vline(xintercept = c(2018-11-01))+
+  geom_point()+scale_color_manual(values=c("black","#006cd1","#994f00"))+
+  scale_x_date(date_labels = "%b %Y", date_breaks = "1 month")+
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+
+Emotions over time
+Figure 2 and SM
+```{r}
+##loading data
+climatechange_all<-readRDS("subs_climate_allemo.Rda")
+comm_climatechange_all<-readRDS("comments_climate_allemo.Rda")
+
+##dividing data into climate skeptics and climate change and joining comments with submissions
+climateskeptics<-climatechange_all[climatechange_all$subreddit=='climateskeptics',c(1,3,5,24:33)]
+comm_climateskeptics<-comm_climatechange_all[comm_climatechange_all$subreddit=='climateskeptics',c(1,3,4,20:29)]
+climateskeptics<-rbind(climateskeptics,comm_climateskeptics)
+rownames(climateskeptics)<-seq(1,nrow(climateskeptics))
+climateskeptics$date<-format(as.POSIXct(climateskeptics$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+climatechange<-climatechange_all[climatechange_all$subreddit!='climateskeptics',c(1,3,5,24:33)]
+comm_climatechange<-comm_climatechange_all[comm_climatechange_all$subreddit!='climateskeptics',c(1,3,4,20:29)]
+climatechange<-rbind(climatechange,comm_climatechange)
+rownames(climatechange)<-seq(1,nrow(climatechange))
+climatechange$date<-format(as.POSIXct(climatechange$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+
+##removing the empty entries
+climateskeptics<-climateskeptics[!is.na(climateskeptics$perc_neg),]
+climatechange<-climatechange[!is.na(climatechange$perc_neg),]
+
+
+##drop years 2008 and 2009
+climateskeptics<-climateskeptics[climateskeptics$date>=2010/01/01,]
+climatechange<-climatechange[climatechange$date>=2010/01/01,]
+
+##computing the monthly means of the negative emotion words
+df_cc<-climatechange %>% 
+    group_by(month = format(as.Date(date, format="%Y/%m/%d"),"%m"),year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(mean = mean(perc_neg))
+
+df_cs<-climateskeptics %>% 
+    group_by(month = format(as.Date(date, format="%Y/%m/%d"),"%m"),year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(mean = mean(perc_neg))
+
+##adjusting timescale for plotting
+ df_cc<-df_cc[df_cc$year<2023,] %>% 
+  mutate(Date = as.Date(paste(year, month, "01", sep = "-"))) 
+ januarydata_cc<-df_cc[df_cc$month=="01",]
+  df_cs<-df_cs[df_cs$year<2023,] %>% 
+  mutate(Date = as.Date(paste(year, month, "01", sep = "-")))
+  januarydata_cs<-df_cs[df_cs$month=="01",]
+
+  ##Figure 2
+   ggplot() + 
+  geom_line(data = df_cc, aes(x = Date, y = mean), color = "#006cd1") +
+  geom_line(data = df_cs, aes(x = Date, y = mean), color = "#994f00") +
+  xlab('year') +
+  ylab('mean ratio negative emotions')+
+     theme_bw()+
+     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    scale_x_continuous(breaks = januarydata_cc$Date, labels = januarydata_cc$year) 
+  ##computing the monthly means of the anger words
+df_cc<-climatechange %>% 
+    group_by(month = format(as.Date(date, format="%Y/%m/%d"),"%m"),year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(mean = mean(perc_anger))
+
+df_cs<-climateskeptics %>% 
+    group_by(month = format(as.Date(date, format="%Y/%m/%d"),"%m"),year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(mean = mean(perc_anger))
+
+##adjusting timescale for plotting
+ df_cc<-df_cc[df_cc$year<2023,] %>% 
+  mutate(Date = as.Date(paste(year, month, "01", sep = "-"))) 
+ januarydata_cc<-df_cc[df_cc$month=="01",]
+  df_cs<-df_cs[df_cs$year<2023,] %>% 
+  mutate(Date = as.Date(paste(year, month, "01", sep = "-")))
+  januarydata_cs<-df_cs[df_cs$month=="01",]
+
+  ##Figure 5 SM, left panel
+   ggplot() + 
+  geom_line(data = df_cc, aes(x = Date, y = mean), color = "#006cd1") +
+  geom_line(data = df_cs, aes(x = Date, y = mean), color = "#994f00") +
+  xlab('year') +
+  ylab('mean ratio anger')+
+     theme_bw()+
+     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    scale_x_continuous(breaks = januarydata_cc$Date, labels = januarydata_cc$year)
+   
+   
+   ##computing the monthly means of the anxiety words
+df_cc<-climatechange %>% 
+    group_by(month = format(as.Date(date, format="%Y/%m/%d"),"%m"),year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(mean = mean(perc_anx))
+
+df_cs<-climateskeptics %>% 
+    group_by(month = format(as.Date(date, format="%Y/%m/%d"),"%m"),year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(mean = mean(perc_anx))
+
+##adjusting timescale for plotting
+ df_cc<-df_cc[df_cc$year<2023,] %>% 
+  mutate(Date = as.Date(paste(year, month, "01", sep = "-"))) 
+ januarydata_cc<-df_cc[df_cc$month=="01",]
+  df_cs<-df_cs[df_cs$year<2023,] %>% 
+  mutate(Date = as.Date(paste(year, month, "01", sep = "-")))
+  januarydata_cs<-df_cs[df_cs$month=="01",]
+
+  ##Figure 5 SM, right panel
+   ggplot() + 
+  geom_line(data = df_cc, aes(x = Date, y = mean), color = "#006cd1") +
+  geom_line(data = df_cs, aes(x = Date, y = mean), color = "#994f00") +
+  xlab('year') +
+  ylab('mean ratio anxiety')+
+     theme_bw()+
+     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    scale_x_continuous(breaks = januarydata_cc$Date, labels = januarydata_cc$year)
+   
+   
+   ##computing the monthly means of the positive emotion words
+df_cc<-climatechange %>% 
+    group_by(month = format(as.Date(date, format="%Y/%m/%d"),"%m"),year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(mean = mean(perc_pos))
+
+df_cs<-climateskeptics %>% 
+    group_by(month = format(as.Date(date, format="%Y/%m/%d"),"%m"),year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(mean = mean(perc_pos))
+
+##adjusting timescale for plotting
+ df_cc<-df_cc[df_cc$year<2023,] %>% 
+  mutate(Date = as.Date(paste(year, month, "01", sep = "-"))) 
+ januarydata_cc<-df_cc[df_cc$month=="01",]
+  df_cs<-df_cs[df_cs$year<2023,] %>% 
+  mutate(Date = as.Date(paste(year, month, "01", sep = "-")))
+  januarydata_cs<-df_cs[df_cs$month=="01",]
+
+  ##Figure 4 SM
+   ggplot() + 
+  geom_line(data = df_cc, aes(x = Date, y = mean), color = "#006cd1") +
+  geom_line(data = df_cs, aes(x = Date, y = mean), color = "#994f00") +
+  xlab('year') +
+  ylab('mean ratio positive emotion')+
+     theme_bw()+
+     theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+
+    scale_x_continuous(breaks = januarydata_cc$Date, labels = januarydata_cc$year)
+   
+```
+
+Topic modelling
+```{r}
+##loading data
+climatechange_all<-readRDS("subs_climate_allemo.Rda")
+comm_climatechange_all<-readRDS("comments_climate_allemo.Rda")
+##changing format to the date
+climatechange_all$date<-format(as.POSIXct(climatechange_all$created_utc,origin='1970-01-01'), format='%Y-%m-%d %H:%M:%OS')
+climatechange_all$year<-format(as.Date(climatechange_all$date, format='%Y-%m-%d %H:%M:%OS'),"%Y")
+comm_climatechange_all$date<-format(as.POSIXct(comm_climatechange_all$created_utc,origin='1970-01-01'), format='%Y-%m-%d %H:%M:%OS')
+comm_climatechange_all$year<-format(as.Date(comm_climatechange_all$date, format='%Y-%m-%d %H:%M:%OS'),"%Y")
+
+##selecting the year 2019
+climatechange<-climatechange_all[climatechange_all$year%in%c(2019),12]
+comm_climatechange<-comm_climatechange_all[comm_climatechange_all$year%in%c(2019),2]
+##joining comments and submissions
+climatechange<-c(climatechange,comm_climatechange)
+##cleaning the text
+climatechange<-gsub('(f|ht)tp\\S+\\s*'," ", climatechange) ##removing links
+climatechange<-gsub('\\\\n',' ',climatechange)
+climatechange<-gsub('\\\\r',' ',climatechange)
+climatechange<-gsub('\\n',' ',climatechange)
+climatechange<-gsub('\\r',' ',climatechange)
+climatechange<-gsub('\t',' ',climatechange)
+climatechange<-gsub('[[:punct:] ]+',' ',climatechange) ##removing punctuation
+climatechange<-tolower(climatechange)
+climatechange<-climatechange[!climatechange%in%c(' deleted ',' delete ',' deleted by user ',' deleted by user removed ',' removed ')]
+
+##saving data for BERTopic to run on Python
+climatechange<-t(climatechange)
+# write.table(climatechange,'data_for_bertopic_2019.csv',row.names = F,col.names=F,sep="\n")
+
+##selecting the year 2018
+climatechange<-climatechange_all[climatechange_all$year%in%c(2018),12]
+comm_climatechange<-comm_climatechange_all[comm_climatechange_all$year%in%c(2018),2]
+##joining comments and submissions
+climatechange<-c(climatechange,comm_climatechange)
+##cleaning the text
+climatechange<-gsub('(f|ht)tp\\S+\\s*'," ", climatechange) ##removing links
+climatechange<-gsub('\\\\n',' ',climatechange)
+climatechange<-gsub('\\\\r',' ',climatechange)
+climatechange<-gsub('\\n',' ',climatechange)
+climatechange<-gsub('\\r',' ',climatechange)
+climatechange<-gsub('\t',' ',climatechange)
+climatechange<-gsub('[[:punct:] ]+',' ',climatechange) ##removing punctuation
+climatechange<-tolower(climatechange)
+climatechange<-climatechange[!climatechange%in%c(' deleted ',' delete ',' deleted by user ',' deleted by user removed ',' removed ')]
+
+##saving data for BERTopic to run on Python
+climatechange<-t(climatechange)
+# write.table(climatechange,'data_for_bertopic_2018.csv',row.names = F,col.names=F,sep="\n")
+
+##loading the outputs of BERTopic
+freq_topics_2018<-read.csv('freq_topics_2018.csv')
+
+freq_topics_2019<-read.csv('freq_topics_2019.csv')
+```
+
+Users overlapping on different subreddits
+Figure 3 and SM
+```{r}
+##loading data
+subs<-readRDS("subs_nobots.Rda")
+comments<-readRDS("comments_nobots.Rda")
+
+##selecting only relevant subreddits
+subreddits<-c('climate','climatechange','climateactionplan','climateoffensive','vegan','meat','climateskeptics','vegetarian')
+submissions<-subs[subs$subreddit%in%c('climate','climatechange','climateactionplan','climateoffensive','vegan','meat','climateskeptics','vegetarian'),c(1,3,5)]
+submissions$type<-'sub'
+comm<-comments[comments$subreddit%in%c('climate','climatechange','climateactionplan','climateoffensive','vegan','meat','climateskeptics','vegetarian'),c(1,3,4)]
+comm$type<-'comm'
+all_data<-rbind(submissions,comm) ##joining comments and submissions
+ ##changing date format
+all_data$date<-format(as.POSIXct(all_data$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+all_data$month<- format(as.Date(all_data$date, format="%Y/%m/%d"),"%m")
+all_data$year<-format(as.Date(all_data$date, format="%Y/%m/%d"),"%Y")
+
+all_data<-all_data[!all_data$author=='[deleted]',] ##removing deleted users
+
+##computing number of overlapping users over time
+overlap_allyears<-data.frame(stringsAsFactors = F)
+for(year in seq(2010,2021))
+{
+  print(year)
+  ##initialising data frames
+all_comb<-as.data.frame(t(combn(subreddits,2)),stringsAsFactors = F)
+overlap_df<-all_comb
+overlap_df$overlapping_before<-NA
+overlap_df$overlapping_after<-NA
+overlap_df$ratio_overlap_before<-NA
+overlap_df$ratio_overlap_after<-NA
+for(i in seq(1,nrow(all_comb))) ##loop over all combinations
+{
+  print(i)
+  sizeV1_before<-unique(all_data$author[all_data$year==year&all_data$subreddit==all_comb$V1[i]]) ##subreddit 1 in the first year
+  sizeV2_before<-unique(all_data$author[all_data$year==year&all_data$subreddit==all_comb$V2[i]]) ##subreddit 2 in the first year
+  sizeV1_after<-unique(all_data$author[all_data$year==year+1&all_data$subreddit==all_comb$V1[i]]) ##subreddit 1 in the second year
+  sizeV2_after<-unique(all_data$author[all_data$year==year+1&all_data$subreddit==all_comb$V2[i]]) ##subreddit 2 in the second year
+  before<-intersect(sizeV1_before,sizeV2_before) ##intersection in the first year
+  after<-intersect(sizeV1_after,sizeV2_after) ##intersection in the second year
+  overlap_df$overlapping_before[i]<-length(before) ##size overlap first year
+  overlap_df$overlapping_after[i]<-length(after) ##size overlap second year
+  overlap_df$ratio_overlap_before[i]<-length(before)/(length(sizeV1_before)+length(sizeV2_before)) ##normalised size of the overlap in the first year
+  overlap_df$ratio_overlap_after[i]<-length(after)/(length(sizeV1_after)+length(sizeV2_after))  ##normalised size of the overlap in the second year
+}
+
+overlap_df$percent_change<-(overlap_df$ratio_overlap_after-overlap_df$ratio_overlap_before)*100/overlap_df$ratio_overlap_after ##computing change in percent
+overlap_df$years<-paste0(year,'_',year+1)
+overlap_allyears<-rbind(overlap_allyears,overlap_df)
+}
+# write.csv(overlap_allyears,'heatmap_overtime.csv',row.names = F,quote=F)
+
+##selecting data to plot
+to_plot<-overlap_allyears[which(overlap_allyears$years=='2018_2019'),c(1,2,7)] ##relevant year
+to_plot<-rbind(to_plot,data.frame(V1=to_plot$V2,V2=to_plot$V1,percent_change=to_plot$percent_change,stringsAsFactors = F))##adding the other triangle
+to_plot<-rbind(to_plot,data.frame(V1=subreddits,V2=subreddits,percent_change=rep(0,length(subreddits)),stringsAsFactors = F)) ##adding the diagonal
+to_plot<-to_plot[!(to_plot$V1%in%c('climateoffensive','climateactionplan')|to_plot$V2%in%c('climateoffensive','climateactionplan')),] ##removing subreddits we are not interested in
+# write.csv(to_plot,'heatmap.csv',row.names = F,quote=F)
+
+##Figure 3 - heatmap
+ggplot(to_plot, aes(V1, V2)) +  geom_tile(aes(fill = percent_change)) + 
+theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1)) + geom_text(label=paste0(round(to_plot$percent_change),'%')) +scale_fill_gradient2(low = "blue", high = "red")
+
+```
+
+
+
+Origin of overlapping users
+```{r}
+##loading data
+subs<-readRDS("subs_nobots.Rda")
+comments<-readRDS("comments_nobots.Rda")
+
+##selecting relevant subreddits
+# subreddits<-c('climate','climatechange','vegan','vegetarian')
+submissions<-subs[subs$subreddit%in%c('climate','climatechange','vegan','vegetarian'),c(1,3,5)]
+comm<-comments[comments$subreddit%in%c('climate','climatechange','climateactionplan','climateoffensive','vegan','meat','climateskeptics','vegetarian'),c(1,3,4)]
+
+all_data<-rbind(submissions,comm) ##joining comments and submissions
+##changing format date
+all_data$date<-format(as.POSIXct(all_data$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+all_data$month<- format(as.Date(all_data$date, format="%Y/%m/%d"),"%m")
+all_data$year<-format(as.Date(all_data$date, format="%Y/%m/%d"),"%Y")
+all_data<-all_data[!all_data$author=='[deleted]',] ##removing deleted users
+
+###selecting the two relevant years
+all_data_2019<-all_data[all_data$year==2019,]
+all_data_2018<-all_data[all_data$year==2018,]
+
+###origin of users in the overlap between climate and vegan
+users_climate_2019<-unique(all_data_2019$author[all_data_2019$subreddit=='climate']) ##users in climate in 2019
+users_vegan_2019<-unique(all_data_2019$author[all_data_2019$subreddit=='vegan']) ##users in vegan in 2019
+users_vegan_climate_2019<-intersect(users_climate_2019,users_vegan_2019) ##users in vegan and climate in 2019
+users_climate_2018<-unique(all_data_2018$author[all_data_2018$subreddit=='climate']) ##users in climate in 2018
+users_vegan_2018<-unique(all_data_2018$author[all_data_2018$subreddit=='vegan']) ##users in vegan in 2018
+users_vegan_climate_2018<-intersect(users_climate_2018,users_vegan_2018) ##users in vegan and climate in 2018
+new_users<-setdiff(users_vegan_climate_2019,users_vegan_climate_2018) ##newcomers in 2019
+
+##computing the origin subreddit
+df_previous_belonging<-data.frame(stringsAsFactors = F)
+for (i in seq(1,length(new_users)))
+{
+ user<-users_climate_2019[i]
+ subs<-unique(all_data_2018$subreddit[all_data_2018$author==user])
+ df<-data.frame(user=user,climate=0,climatechange=0,vegan=0,vegetarian=0,stringsAsFactors = F)
+ if('climate' %in% subs){df$climate<-1}
+ if('climatechange' %in% subs){df$climatechange<-1}
+ if('vegan' %in% subs){df$vegan<-1}
+ if('vegetarian' %in% subs){df$vegetarian<-1}
+ df_previous_belonging<-rbind(df_previous_belonging,df)
+}
+
+length(which(df_previous_belonging$vegan==1&df_previous_belonging$vegetarian==0&df_previous_belonging$climate==0&df_previous_belonging$climatechange==0))*100/length(new_users) ##percentage of users who were in the vegan subreddit in 2018
+
+length(which(df_previous_belonging$vegan==0&df_previous_belonging$vegetarian==1&df_previous_belonging$climate==0&df_previous_belonging$climatechange==0))*100/length(new_users) ##percentage of users who were in the vegetarian subreddit in 2018
+
+
+length(which(df_previous_belonging$vegan==0&df_previous_belonging$vegetarian==0&df_previous_belonging$climate==0&df_previous_belonging$climatechange==0))*100/length(new_users) ##percentage of users who were not active in any of the subreddits considered in 2018
+
+length(which(df_previous_belonging$vegan==0&df_previous_belonging$vegetarian==0&df_previous_belonging$climate==1&df_previous_belonging$climatechange==0))*100/length(new_users) ##percentage of users who were active in the climate subreddit in 2018
+
+
+###origin of users in the overlap between climate and vegetarian
+users_vegetarian_2019<-unique(all_data_2019$author[all_data_2019$subreddit=='vegetarian']) ##users in vegetarian in 2019
+users_vegetarian_climate_2019<-intersect(users_climate_2019,users_vegetarian_2019) ##users in vegetarian and climate in 2019
+users_vegetarian_2018<-unique(all_data_2018$author[all_data_2018$subreddit=='vegetarian']) ##users in vegetarian in 2018
+users_vegetarian_climate_2018<-intersect(users_climate_2018,users_vegetarian_2018) ##users in vegetarian and climate in 2018
+new_users<-setdiff(users_vegetarian_climate_2019,users_vegetarian_climate_2018) ##newcomers
+
+##computing the origin subreddit
+df_previous_belonging<-data.frame(stringsAsFactors = F)
+for (i in seq(1,length(new_users)))
+{
+ user<-users_climate_2019[i]
+ subs<-unique(all_data_2018$subreddit[all_data_2018$author==user])
+ df<-data.frame(user=user,climate=0,climatechange=0,vegan=0,vegetarian=0,stringsAsFactors = F)
+ if('climate' %in% subs){df$climate<-1}
+ if('climatechange' %in% subs){df$climatechange<-1}
+ if('vegan' %in% subs){df$vegan<-1}
+ if('vegetarian' %in% subs){df$vegetarian<-1}
+ df_previous_belonging<-rbind(df_previous_belonging,df)
+}
+
+length(which(df_previous_belonging$vegan==0&df_previous_belonging$vegetarian==1&df_previous_belonging$climate==0&df_previous_belonging$climatechange==0))*100/length(new_users) ##users in vegetarian in 2018
+
+length(which(df_previous_belonging$vegan==0&df_previous_belonging$vegetarian==0&df_previous_belonging$climate==0&df_previous_belonging$climatechange==0))*100/length(new_users) ##newcomers
+
+length(which(df_previous_belonging$vegan==0&df_previous_belonging$vegetarian==0&df_previous_belonging$climate==1&df_previous_belonging$climatechange==0))*100/length(new_users) ##users in climate in 2018
+
+length(which(df_previous_belonging$vegan==1&df_previous_belonging$vegetarian==0&df_previous_belonging$climate==0&df_previous_belonging$climatechange==0))*100/length(new_users) ##users in vegan in 2018
+
+
+###people into climate in 2019, how many join the vegetarian or vegan subreddit?
+users_climate_2019<-unique(all_data_2019$author[all_data_2019$subreddit%in%c('climate','climatechange')]) ##users in climate and climatechange in 2019
+users_only_vegan_2019<-setdiff(users_vegan_2019,users_vegetarian_2019) ##users only vegan in 2019
+users_only_vegetarian_2019<-setdiff(users_vegetarian_2019,users_vegan_2019) ##users only vegetarian in 2019
+users_vegan_vegetarian_2018<-union(users_vegan_2018,users_vegetarian_2018) ##users vegan and vegetarian in 2018
+users_vegan_and_vegetarian_2019<-intersect(users_vegan_2019,users_vegetarian_2019) ##users vegan and vegetarian in 2019
+
+##the ones who join vegan:
+length(intersect(users_climate_2019,setdiff(users_only_vegan_2019,users_vegan_vegetarian_2018)))*100/length(users_climate_2019)
+##the ones who join vegetarian:
+length(intersect(users_climate_2019,setdiff(users_only_vegetarian_2019,users_vegan_vegetarian_2018)))*100/length(users_climate_2019)
+##the ones who join both:
+length(intersect(users_climate_2019,users_vegan_and_vegetarian_2019))*100/length(users_climate_2019)
+```
+
+Ratio comments per submissions
+Figure 1 SM
+```{r}
+###loading data
+subs<-readRDS("subs_nobots.Rda")
+comments<-readRDS("comments_nobots.Rda")
+
+##Climate skeptics
+###Dividing by comments and submissions and changing date format
+climateskeptics_subs<-subs[subs$subreddit=='climateskeptics',c(1,3,5)]
+climateskeptics_subs$date<-format(as.POSIXct(climateskeptics_subs$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+climateskeptics_comm<-comments[comments$subreddit=='climateskeptics',c(1,3,4)]
+climateskeptics_comm$date<-format(as.POSIXct(climateskeptics_comm$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+###df of number of comments and submissions per year and ratio thereof
+hist_df<-data.frame(stringsAsFactors = F)
+ratio_df<-data.frame(stringsAsFactors = F)
+for(i in as.character(seq(2008,2023)))
+ {
+   data_comm<-nrow(climateskeptics_comm[format(as.Date(climateskeptics_comm$date),"%Y")==i,])
+   data_subs<-nrow(climateskeptics_subs[format(as.Date(climateskeptics_subs$date),"%Y")==i,])
+   
+   hist_df<-rbind(hist_df,data.frame(year=i,counts=data_comm,type="comm",stringsAsFactors = F))
+      hist_df<-rbind(hist_df,data.frame(year=i,counts=data_subs,type="subs",stringsAsFactors = F))
+       ratio_df<-rbind(ratio_df,data.frame(year=i,ratio=data_comm/data_subs,stringsAsFactors = F))
+}
+ratio_df_climateskeptics<-ratio_df
+
+###climate-related subreddits
+####selecting only climate-related subreddits and changing date format
+climatechange_subs<-subs[subs$subreddit%in%c('climate','climatechange','climateoffensive','climateactionplan'),c(1,3,5)]
+climatechange_subs$date<-format(as.POSIXct(climatechange_subs$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+climatechange_comm<-comments[comments$subreddit%in%c('climate','climatechange','climateoffensive','climateactionplan'),c(1,3,4)]
+climatechange_comm$date<-format(as.POSIXct(climatechange_comm$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+##initialising dataframes
+hist_df<-data.frame(stringsAsFactors = F) ##df of counts
+ratio_df<-data.frame(stringsAsFactors = F) ##df of ratio
+for(i in as.character(seq(2008,2023)))
+ {
+   data_comm<-nrow(climatechange_comm[format(as.Date(climatechange_comm$date),"%Y")==i,])
+   ##number comments
+   data_subs<-nrow(climatechange_subs[format(as.Date(climatechange_subs$date),"%Y")==i,])
+   ##number submissions
+   hist_df<-rbind(hist_df,data.frame(year=i,counts=data_comm,type="comm",stringsAsFactors = F))
+      hist_df<-rbind(hist_df,data.frame(year=i,counts=data_subs,type="subs",stringsAsFactors = F))
+      ratio_df<-rbind(ratio_df,data.frame(year=i,ratio=data_comm/data_subs,stringsAsFactors = F))
+}
+ratio_df_climatechange<-ratio_df
+
+###baseline
+###importing baseline counts
+baseline_comments<-read.csv('reddit_linecounts_comments.txt',sep=" ",header = F,col.names=c('counts','filename'))
+baseline_submissions<-read.csv('reddit_linecounts_submissions.txt',sep=" ",header = F,col.names=c('counts','filename'))
+baseline_comments$month<-NA
+baseline_comments$year<-NA
+##change date format for comments
+for(i in seq(1,nrow(baseline_comments)))
+{
+  file<-gsub("RC_","",baseline_comments$filename[i])
+  baseline_comments$month[i]<-strsplit(file,'-')[[1]][2]
+  baseline_comments$year[i]<-strsplit(file,'-')[[1]][1]
+}
+##aggegating counts by year
+baseline_comments<-aggregate(baseline_comments$counts, by=list(year=baseline_comments$year), FUN=sum)
+
+##change date format for submissions
+baseline_submissions$month<-NA
+baseline_submissions$year<-NA
+for(i in seq(1,nrow(baseline_submissions)))
+{
+  file<-gsub("RS_","",baseline_submissions$filename[i])
+  baseline_submissions$month[i]<-strsplit(file,'-')[[1]][2]
+  baseline_submissions$year[i]<-strsplit(file,'-')[[1]][1]
+}
+##aggegating counts by year
+baseline_submissions<-aggregate(baseline_submissions$counts, by=list(year=baseline_submissions$year), FUN=sum)
+
+
+baseline<-left_join(baseline_comments,baseline_submissions,by=c('year')) ##joining comments and submissions
+baseline$ratio<-baseline$x.x/baseline$x.y ##ratio comm/subs
+##removing useless columns
+baseline$x.x<-NULL
+baseline$x.y<-NULL
+
+##creating dataframe for plotting
+ratio_df1<-ratio_df_climatechange
+ratio_df1$group<-'climate-related'
+ratio_df_climateskeptics$group<-'climate skeptics'
+ratio_df1<-rbind(ratio_df1,ratio_df_climateskeptics)
+baseline$group<-'baseline'
+ratio_df1<-rbind(ratio_df1,baseline)
+
+ggplot(data = ratio_df1[ratio_df1$year>=2010&ratio_df1$year<2023,], aes(x = year, y=ratio,group=group)) +
+  geom_line(aes(color=group))+
+  geom_point(aes(color=group))+
+   scale_color_manual(values=c('black',"#006cd1","#994f00"))+theme_bw()+
+  ylab('ratio comments per submission')
+
+
+###computing the increase
+percent_change<-data.frame(stringsAsFactors = F)
+for(i in seq(2011,2022))
+{
+  ratio_before<-ratio_df1$ratio[ratio_df1$year==i-1 & ratio_df1$group=='climate-related']
+  ratio_after<-ratio_df1$ratio[ratio_df1$year==i & ratio_df1$group=='climate-related']
+  variation<-(ratio_after-ratio_before)/ratio_before
+  percent_change<-rbind(percent_change,data.frame(year=paste0(i-1,'_',i),variation=variation,group='climate-related',stringsAsFactors = F))
+  
+    ratio_before<-ratio_df1$ratio[ratio_df1$year==i-1 & ratio_df1$group=='climate skeptics']
+  ratio_after<-ratio_df1$ratio[ratio_df1$year==i & ratio_df1$group=='climate skeptics']
+  variation<-(ratio_after-ratio_before)/ratio_before
+  percent_change<-rbind(percent_change,data.frame(year=paste0(i-1,'_',i),variation=variation,group='climate skeptics',stringsAsFactors = F))
+  
+    ratio_before<-ratio_df1$ratio[ratio_df1$year==i-1 & ratio_df1$group=='baseline']
+  ratio_after<-ratio_df1$ratio[ratio_df1$year==i & ratio_df1$group=='baseline']
+  variation<-(ratio_after-ratio_before)/ratio_before
+  percent_change<-rbind(percent_change,data.frame(year=paste0(i-1,'_',i),variation=variation,group='baseline',stringsAsFactors = F))
+}
+
+ggplot(data = percent_change, aes(x = year, y=variation,group=group)) +
+  geom_line(aes(color=group))+
+  geom_point(aes(color=group))+
+   scale_color_manual(values=c('black',"#006cd1","#994f00"))+theme_bw()+
+  ylab('percent change ratio comments per submission')
+```
+
+
+Number of unique active users
+Figure 2 SM
+```{r}
+###loading data
+subs<-readRDS("subs_nobots.Rda")
+comments<-readRDS("comments_nobots.Rda")
+###climate-related subreddits
+climatechange<-subs[subs$subreddit%in%c('climate','climatechange','climateactionplan','climateoffensive'),c(1,3,5)]
+climatechange_comm<-comments[comments$subreddit%in%c('climate','climatechange','climateactionplan','climateoffensive'),c(1,3,4)]
+climatechange<-rbind(climatechange,climatechange_comm)
+climatechange$date<-format(as.POSIXct(climatechange$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+##counting unique users
+df_cc<-climatechange %>% 
+    group_by(year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(counts = n_distinct(author))
+
+###climate skeptics
+climateskeptics<-subs[subs$subreddit%in%c('climateskeptics'),c(1,3,5)]
+climateskeptics_comm<-comments[comments$subreddit%in%c('climateskeptics'),c(1,3,4)]
+climateskeptics<-rbind(climateskeptics,climateskeptics_comm)
+climateskeptics$date<-format(as.POSIXct(climateskeptics$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+##counting unique users
+df_cs<-climateskeptics %>% 
+    group_by(year = format(as.Date(date, format="%Y/%m/%d"),"%Y")) %>% 
+    summarize(counts = n_distinct(author))
+
+##dataframe for plotting
+hist_df<-df_cc
+hist_df$subreddit_group<-'climate-related'
+hist_df1<-df_cs
+hist_df1$subreddit_group<-'climate skeptics'
+hist_df<-rbind(hist_df,hist_df1)
+
+ggplot(data = hist_df[hist_df$year>=2010&hist_df$year<2023,], aes(x = year, y =counts, fill = subreddit_group)) +
+  geom_bar(stat = "identity", position = position_dodge(), alpha = 0.75)+
+  ylab('Number of unique active users')+
+  scale_fill_manual(values=c("#006cd1","#994f00"))+ theme_bw()+
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=0.5))
+
+# write.csv(hist_df,'active_users_peryear.csv',quote=F,row.names = F)
+
+###computing the increase
+(df_cc$counts[df_cc$year==2019]-df_cc$counts[df_cc$year==2018])*100/df_cc$counts[df_cc$year==2018]
+
+(df_cs$counts[df_cs$year==2019]-df_cs$counts[df_cs$year==2018])*100/df_cs$counts[df_cs$year==2018]
+
+percent_change<-data.frame(stringsAsFactors = F)
+for(i in seq(2011,2022))
+{
+  counts_before<-df_cc$counts[df_cc$year==i-1]
+  counts_after<-df_cc$counts[df_cc$year==i]
+  variation<-(counts_after-counts_before)/counts_before
+  percent_change<-rbind(percent_change,data.frame(year=paste0(i-1,'_',i),variation=variation,group='climate-related',stringsAsFactors = F))
+  
+  counts_before<-df_cs$counts[df_cs$year==i-1]
+  counts_after<-df_cs$counts[df_cs$year==i]
+  variation<-(counts_after-counts_before)/counts_before
+  percent_change<-rbind(percent_change,data.frame(year=paste0(i-1,'_',i),variation=variation,group='climate skeptics',stringsAsFactors = F)) 
+}
+
+ggplot(data = percent_change, aes(x = year, y=variation,group=group)) +
+  geom_line(aes(color=group))+
+  geom_point(aes(color=group))+
+   scale_color_manual(values=c("#006cd1","#994f00"))+theme_bw()+
+  ylab('percent change ratio comments per submission')
+```
+
+Correlation with strike participants
+Figure 3 SM
+```{r}
+subs<-readRDS("subs_climate_allemo.Rda")
+comm<-readRDS("comments_climate_allemo.Rda")
+
+##selecting climate-related subreddits and joining comments with submissions
+
+climatechange<-subs[subs$subreddit!='climateskeptics',c(1,3,5)]
+comm_climatechange<-comm[comm$subreddit!='climateskeptics',c(1,3,4)]
+climatechange<-rbind(climatechange,comm_climatechange)
+rownames(climatechange)<-seq(1,nrow(climatechange))
+climatechange$date<-format(as.POSIXct(climatechange$created_utc,origin='1970-01-01'), format='%Y/%m/%d')
+
+###computing counts of submissions and comments per month
+hist_df<-data.frame(stringsAsFactors = F)
+ for(i in as.character(seq(2018,2020)))
+ {
+   print(i)
+   for(j in c("01","02","03","04","05","06","07","08","09","10","11","12"))
+   {
+   ##selecting data relative to the year and computing the number of entries
+    data_cc<-length(which(format(as.Date(climatechange$date),"%Y")==i&format(as.Date(climatechange$date),"%m")==j))
+     hist_df<-rbind(hist_df,data.frame(year=i,month=j,counts=data_cc,stringsAsFactors = F))
+   }
+ }
+hist_df$date <- as.Date(paste0("01-", paste(hist_df$month,hist_df$year,sep="-")), format = "%d-%m-%Y")
+
+####FFF strikes data
+FFF_data<-data.frame(date=c("30-11-2018","15-03-2019","30-09-2019","29-11-2019","06-12-2019","24-04-2020","25-09-2020"),num_people_US=c(5,31997,759705+40988,70000,14040,39000,11841),num_strikes_US=c(5,220,982+404,331,378,104,119),stringsAsFactors = F) 
+
+date_split<-strsplit(FFF_data$date,'-')
+FFF_data$month<-sapply(date_split,"[[",2)
+FFF_data$year<-sapply(date_split,"[[",3)
+FFF_data<-left_join(FFF_data,hist_df,by=c('month','year')) ##merging data together
+
+##correlation
+# cor.test(FFF_data$num_people_US,FFF_data$counts)
+cor.test(FFF_data$num_strikes_US,FFF_data$counts)
+ggplot(data = FFF_data, aes(x = num_people_US, y = counts)) +
+  geom_point(color='black', size = 3) +
+  geom_smooth(method = "lm", se = FALSE)+
+  xlab("num strikes")+ylab("Activity counts")+
+  theme(plot.title = element_text(size=16,face='bold',hjust=0.5),
+        axis.title.x=element_text(size=12),
+        axis.title.y=element_text(size=12))+
+  theme_bw()
+```
