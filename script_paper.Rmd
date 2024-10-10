@@ -1,6 +1,6 @@
 ---
-title: "Reddit_climate"
-author: "Anna Di Natale"
+title: "The impact of Fridays for Future on climate change attitudes and behavior on Reddit"
+author: "xxxxxx"
 date: "2024-03-01"
 output: pdf_document
 ---
